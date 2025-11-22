@@ -11,8 +11,6 @@ class LoadImagesFromFolder:
         return {
             "required": {
                 "folder_path": ("STRING", {"default": "", "multiline": False}),
-                "batch_index": ("INT", {"default": 0, "min": 0, "max": 999999}),
-                "batch_size": ("INT", {"default": 1, "min": 1, "max": 64}),
                 "sort": ("BOOLEAN", {"default": True}),
             }
         }
@@ -21,7 +19,7 @@ class LoadImagesFromFolder:
     FUNCTION = "load_images"
     CATEGORY = "image"
 
-    def load_images(self, folder_path, batch_index, batch_size, sort):
+    def load_images(self, folder_path, sort):
         if not os.path.isdir(folder_path):
             raise FileNotFoundError(f"Folder not found: {folder_path}")
 
@@ -33,22 +31,15 @@ class LoadImagesFromFolder:
         if sort:
             files.sort()
 
-        start_idx = batch_index * batch_size
-        end_idx = start_idx + batch_size
-        
-        # Handle wrap-around or clamping if needed, but for now strict indexing
-        if start_idx >= len(files):
-            # Return empty or raise error? Standard is usually error or empty.
-            # Let's return a single black frame to avoid crashing workflows if index goes over
-            print(f"Warning: Batch index {batch_index} out of range for folder with {len(files)} images.")
+        if not files:
+            # Return empty batch if no images found
+            print(f"Warning: No images found in folder {folder_path}")
             return (torch.zeros((1, 64, 64, 3), dtype=torch.float32), torch.zeros((1, 64, 64), dtype=torch.float32))
 
-        selected_files = files[start_idx:end_idx]
-        
         images = []
         masks = []
 
-        for filename in selected_files:
+        for filename in files:
             image_path = os.path.join(folder_path, filename)
             try:
                 i = Image.open(image_path)
@@ -105,7 +96,7 @@ class LoadImagesFromFolder:
         return (output_image, output_mask)
 
     @classmethod
-    def IS_CHANGED(s, folder_path, batch_index, batch_size, sort):
+    def IS_CHANGED(s, folder_path, sort):
         return float("nan") # Always re-run to check for new files or changes
 
 # API Endpoints for Directory Browsing
