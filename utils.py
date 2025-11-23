@@ -18,9 +18,10 @@ def requeue_workflow_unchecked():
     
     # Handle different ComfyUI versions - unpack appropriately
     if len(values) == 6:
-        (_, _, prompt, extra_data, outputs_to_execute, _) = values
+        (_, _, prompt, extra_data, outputs_to_execute, sensitive) = values
     elif len(values) == 5:
         (_, _, prompt, extra_data, outputs_to_execute) = values
+        sensitive = {}  # Default empty dict for older versions
     else:
         print(f"Warning: Unexpected prompt_queue structure with {len(values)} values")
         return
@@ -37,7 +38,8 @@ def requeue_workflow_unchecked():
     number = -server.PromptServer.instance.number
     server.PromptServer.instance.number += 1
     prompt_id = str(uuid.uuid4())
-    prompt_queue.put((number, prompt_id, prompt, extra_data, outputs_to_execute))
+    prompt_queue.put((number, prompt_id, prompt, extra_data, outputs_to_execute, sensitive))
+
 
 
 def requeue_workflow(requeue_required=(-1, True)):
