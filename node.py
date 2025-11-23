@@ -15,7 +15,8 @@ class LoadImagesFromFolder:
             }
         }
 
-    RETURN_TYPES = ("IMAGE", "MASK")
+    RETURN_TYPES = ("IMAGE",)
+    OUTPUT_IS_LIST = (True,)
     FUNCTION = "load_images"
     CATEGORY = "image"
 
@@ -32,12 +33,11 @@ class LoadImagesFromFolder:
             files.sort()
 
         if not files:
-            # Return empty batch if no images found
+            # Return empty list if no images found
             print(f"Warning: No images found in folder {folder_path}")
-            return (torch.zeros((1, 64, 64, 3), dtype=torch.float32), torch.zeros((1, 64, 64), dtype=torch.float32))
+            return ([],)
 
         images = []
-        masks = []
 
         for filename in files:
             image_path = os.path.join(folder_path, filename)
@@ -51,49 +51,12 @@ class LoadImagesFromFolder:
                 image = np.array(image).astype(np.float32) / 255.0
                 image = torch.from_numpy(image)[None,]
                 
-                if 'A' in i.getbands():
-                    mask = np.array(i.getchannel('A')).astype(np.float32) / 255.0
-                    mask = 1. - torch.from_numpy(mask)
-                else:
-                    mask = torch.zeros((image.shape[1], image.shape[2]), dtype=torch.float32, device="cpu")
-                
                 images.append(image)
-                masks.append(mask)
             except Exception as e:
                 print(f"Error loading image {filename}: {e}")
                 continue
 
-        if images:
-            # Find max dimensions to pad to
-            max_h = max(img.shape[1] for img in images)
-            max_w = max(img.shape[2] for img in images)
-            
-            padded_images = []
-            padded_masks = []
-            
-            for img, mask in zip(images, masks):
-                h, w = img.shape[1], img.shape[2]
-                pad_h = max_h - h
-                pad_w = max_w - w
-                
-                if pad_h > 0 or pad_w > 0:
-                    # Pad image
-                    img = torch.nn.functional.pad(img.permute(0, 3, 1, 2), (0, pad_w, 0, pad_h), mode='constant', value=0)
-                    img = img.permute(0, 2, 3, 1)
-                    
-                    # Pad mask
-                    mask = torch.nn.functional.pad(mask.unsqueeze(0), (0, pad_w, 0, pad_h), mode='constant', value=0).squeeze(0)
-                
-                padded_images.append(img)
-                padded_masks.append(mask)
-
-            output_image = torch.cat(padded_images, dim=0)
-            output_mask = torch.cat([m[None,] for m in padded_masks], dim=0)
-        else:
-            output_image = torch.zeros((1, 64, 64, 3), dtype=torch.float32)
-            output_mask = torch.zeros((1, 64, 64), dtype=torch.float32)
-
-        return (output_image, output_mask)
+        return (images,)
 
     @classmethod
     def IS_CHANGED(s, folder_path, sort):
