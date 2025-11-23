@@ -1,14 +1,11 @@
 from .node import LoadImagesFromFolder
-from .batch_manager import BatchManagerNode
 
 NODE_CLASS_MAPPINGS = {
-    "LoadImagesFromFolder": LoadImagesFromFolder,
-    "BatchManager": BatchManagerNode
+    "LoadImagesFromFolder": LoadImagesFromFolder
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "LoadImagesFromFolder": "Load Images From Folder (Browse)",
-    "BatchManager": "Batch Manager"
+    "LoadImagesFromFolder": "Load Images From Folder (Browse)"
 }
 
 WEB_DIRECTORY = "./js"

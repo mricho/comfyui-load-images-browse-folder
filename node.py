@@ -49,15 +49,15 @@ def images_generator(folder_path, sort=True, meta_batch=None, unique_id=None):
 
 
 class LoadImagesFromFolder:
+    # Class-level batch manager storage
+    _batch_managers = {}
+
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
                 "folder_path": ("STRING", {"default": "", "multiline": False}),
                 "sort": ("BOOLEAN", {"default": True}),
-            },
-            "optional": {
-                "meta_batch": ("BATCH_MANAGER",),
             },
             "hidden": {
                 "unique_id": "UNIQUE_ID"
@@ -69,48 +69,57 @@ class LoadImagesFromFolder:
     FUNCTION = "load_images"
     CATEGORY = "image"
 
-    def load_images(self, folder_path, sort, meta_batch=None, unique_id=None):
-        # Initialize generator if this is first run or meta_batch is not being used
-        if meta_batch is None or unique_id not in meta_batch.inputs:
+    def load_images(self, folder_path, sort, unique_id=None):
+        # Create or retrieve internal batch manager for this node instance
+        if unique_id not in LoadImagesFromFolder._batch_managers:
+            from .batch_manager import BatchManager
+            meta_batch = BatchManager()
+            meta_batch.unique_id = unique_id
+            meta_batch.frames_per_batch = 1  # Process one image at a time
+            LoadImagesFromFolder._batch_managers[unique_id] = meta_batch
+        else:
+            meta_batch = LoadImagesFromFolder._batch_managers[unique_id]
+        
+        # Initialize generator if this is first run
+        if unique_id not in meta_batch.inputs:
             gen = images_generator(folder_path, sort, meta_batch, unique_id)
             
-            if meta_batch is not None:
-                # Get total image count
-                total_frames = next(gen)
-                meta_batch.inputs[unique_id] = gen
-                # Set frames_per_batch to total number of images as user requested
-                meta_batch.total_frames = min(meta_batch.total_frames, total_frames)
+            # Get total image count
+            total_frames = next(gen)
+            meta_batch.inputs[unique_id] = gen
+            meta_batch.total_frames = total_frames
         else:
             # Retrieve existing generator
             gen = meta_batch.inputs[unique_id]
 
-        # Collect images for this batch
+        # Collect images for this batch (1 image at a time)
         images = []
         try:
-            if meta_batch is not None:
-                # Load frames_per_batch images
-                for _ in range(meta_batch.frames_per_batch):
-                    image = next(gen)
-                    images.append(image)
-            else:
-                # Load all images at once (no meta_batch)
-                for image in gen:
-                    images.append(image)
+            for _ in range(meta_batch.frames_per_batch):
+                image = next(gen)
+                images.append(image)
         except StopIteration:
             pass
 
         if not images:
             print(f"Warning: No images loaded from folder {folder_path}")
+            # Clean up batch manager
+            if unique_id in LoadImagesFromFolder._batch_managers:
+                del LoadImagesFromFolder._batch_managers[unique_id]
             return (torch.zeros((1, 64, 64, 3), dtype=torch.float32), 0)
 
         # Stack images into batch
         output_images = torch.stack(images, dim=0)
         frame_count = len(images)
 
-        # Requeue workflow if meta_batch is active and has more images
-        if meta_batch is not None and not meta_batch.has_closed_inputs:
+        # Requeue workflow if there are more images to process
+        if not meta_batch.has_closed_inputs:
             from .utils import requeue_workflow
-            requeue_workflow((meta_batch.unique_id, True))
+            requeue_workflow((unique_id, True))
+        else:
+            # Clean up batch manager when done
+            if unique_id in LoadImagesFromFolder._batch_managers:
+                del LoadImagesFromFolder._batch_managers[unique_id]
 
         return (output_images, frame_count)
 
